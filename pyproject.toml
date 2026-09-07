@@ -1,0 +1,20 @@
+[project]
+name = "pokemon-dnd"
+version = "0.1.0"
+description = ""
+authors = [
+    {name = "David Zambrano",email = "david.zambrano.manrique@iks.fraunhofer.de"}
+]
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "pokeapi (>=0.3,<0.4)",
+    "ipython (>=9.16.1,<10.0.0)",
+    "requests (>=2.34.2,<3.0.0)",
+    "pillow (>=12.3.0,<13.0.0)"
+]
+
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"

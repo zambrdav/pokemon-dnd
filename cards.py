@@ -1,0 +1,682 @@
+from io import BytesIO
+import requests
+from PIL import Image, ImageDraw, ImageFont
+from pokemons.pokemon import Pokemon
+from pokemons.abilities import Ability
+from pokemons.moves import Move
+
+
+CARD_WIDTH = 750
+CARD_HEIGHT = 1050
+
+
+def get_pokemon_image(
+    pokemon_name: str,
+    shiny: bool = False,
+) -> Image.Image:
+    response = requests.get(
+        f"https://pokeapi.co/api/v2/pokemon/{pokemon_name.lower()}"
+    )
+    response.raise_for_status()
+
+    data = response.json()
+
+    artwork = data["sprites"]["other"]["official-artwork"]
+
+    image_url = (
+        artwork["front_shiny"]
+        if shiny
+        else artwork["front_default"]
+    )
+
+    if image_url is None:
+        variant = "shiny" if shiny else "normal"
+        raise ValueError(
+            f"No {variant} official artwork found for {pokemon_name}."
+        )
+
+    image_response = requests.get(image_url)
+    image_response.raise_for_status()
+
+    return Image.open(
+        BytesIO(image_response.content)
+    ).convert("RGBA")
+
+def draw_wrapped_text(
+    draw: ImageDraw.ImageDraw,
+    text: str,
+    position: tuple[int, int],
+    font: ImageFont.ImageFont,
+    max_width: int,
+    line_spacing: int = 5,
+):
+    x, y = position
+
+    words = text.split()
+    lines = []
+    current_line = ""
+
+    for word in words:
+        test_line = (
+            f"{current_line} {word}".strip()
+        )
+
+        bbox = draw.textbbox(
+            (0, 0),
+            test_line,
+            font=font,
+        )
+
+        width = bbox[2] - bbox[0]
+
+        if width <= max_width:
+            current_line = test_line
+        else:
+            lines.append(current_line)
+            current_line = word
+
+    if current_line:
+        lines.append(current_line)
+
+    for line in lines:
+        draw.text(
+            (x, y),
+            line,
+            font=font,
+            fill="black",
+        )
+
+        bbox = draw.textbbox(
+            (0, 0),
+            line,
+            font=font,
+        )
+
+        line_height = bbox[3] - bbox[1]
+
+        y += line_height + line_spacing
+
+def draw_friendship_bar(
+    draw: ImageDraw.ImageDraw,
+    position: tuple[int, int],
+    box_count: int = 5,
+    box_width: int = 45,
+    box_height: int = 24,
+    spacing: int = 10,
+):
+    x, y = position
+
+    for i in range(box_count):
+        left = x + i * (box_width + spacing)
+        top = y
+        right = left + box_width
+        bottom = top + box_height
+
+        draw.rectangle(
+            (left, top, right, bottom),
+            outline="black",
+            width=2,
+        )
+
+
+def create_pokemon_card(
+    pokemon: Pokemon,
+    shiny: bool = False,
+    output_path: str | None = None,
+) -> Image.Image:
+
+    card = Image.new(
+        "RGB",
+        (CARD_WIDTH, CARD_HEIGHT),
+        "white",
+    )
+
+    draw = ImageDraw.Draw(card)
+
+    # Fonts
+    title_font = ImageFont.load_default(size=42)
+    header_font = ImageFont.load_default(size=28)
+    normal_font = ImageFont.load_default(size=22)
+    small_font = ImageFont.load_default(size=18)
+
+    # -------------------------
+    # Pokémon name and number
+    # -------------------------
+
+    draw.text(
+        (40, 30),
+        f"#{pokemon.pokedex_number:03d}",
+        font=header_font,
+        fill="black",
+    )
+
+    draw.text(
+        (160, 22),
+        pokemon.name.upper(),
+        font=title_font,
+        fill="black",
+    )
+
+    # -------------------------
+    # Types
+    # -------------------------
+
+    type_text = pokemon.first_type.value.capitalize()
+
+    if pokemon.second_type is not None:
+        type_text += f" / {pokemon.second_type.value.capitalize()}"
+
+    draw.text(
+        (40, 85),
+        type_text,
+        font=header_font,
+        fill="black",
+    )
+
+    # -------------------------
+    # Friendship bar
+    # -------------------------
+
+    draw.text(
+        (40, 120),
+        "FRIENDSHIP",
+        font=small_font,
+        fill="black",
+    )
+
+    draw_friendship_bar(
+        draw=draw,
+        position=(200, 118),
+    )
+
+    # -------------------------
+    # Artwork
+    # -------------------------
+
+    artwork = get_pokemon_image(
+        pokemon.name,
+        shiny=shiny,
+    )
+
+    artwork.thumbnail((320, 320))
+
+    artwork_x = (CARD_WIDTH - artwork.width) // 2
+    artwork_y = 170
+
+    card.paste(
+        artwork,
+        (artwork_x, artwork_y),
+        artwork,
+    )
+
+    # -------------------------
+    # HP and stats
+    # -------------------------
+
+    stats_top = 500
+
+    draw.text(
+        (50, stats_top),
+        f"HP: {pokemon.HP}",
+        font=header_font,
+        fill="black",
+    )
+
+    left_stats = [
+        ("ATK", pokemon.attack, pokemon.attack_modifier),
+        ("DEF", pokemon.defense, pokemon.defense_modifier),
+        ("SPD", pokemon.speed, pokemon.speed_modifier),
+    ]
+
+    right_stats = [
+        ("SpA", pokemon.special_attack, pokemon.special_attack_modifier),
+        ("SpD", pokemon.special_defense, pokemon.special_defense_modifier),
+    ]
+
+    y_left = stats_top + 45
+    for name, value, modifier in left_stats:
+        draw.text(
+            (50, y_left),
+            f"{name}: {value} (+{modifier})",
+            font=normal_font,
+            fill="black",
+        )
+        y_left += 34
+
+    y_right = stats_top + 45
+    for name, value, modifier in right_stats:
+        draw.text(
+            (380, y_right),
+            f"{name}: {value} (+{modifier})",
+            font=normal_font,
+            fill="black",
+        )
+        y_right += 34
+
+    # -------------------------
+    # Ability
+    # -------------------------
+
+    ability_y = 640
+
+    draw.text(
+        (50, ability_y),
+        "ABILITY",
+        font=header_font,
+        fill="black",
+    )
+
+    draw.text(
+        (50, ability_y + 35),
+        pokemon.ability.name,
+        font=normal_font,
+        fill="black",
+    )
+
+    draw_wrapped_text(
+        draw=draw,
+        text=pokemon.ability.description,
+        position=(50, ability_y + 65),
+        font=small_font,
+        max_width=650,
+    )
+
+    # -------------------------
+    # Pokédex entry
+    # -------------------------
+
+    pokedex_y = 790
+
+    draw.text(
+        (50, pokedex_y),
+        "POKÉDEX ENTRY",
+        font=header_font,
+        fill="black",
+    )
+
+    if pokemon.pokedex_entry:
+        draw_wrapped_text(
+            draw=draw,
+            text=pokemon.pokedex_entry,
+            position=(50, pokedex_y + 35),
+            font=small_font,
+            max_width=650,
+        )
+    else:
+        draw.text(
+            (50, pokedex_y + 35),
+            "No Pokédex entry available.",
+            font=small_font,
+            fill="black",
+        )
+
+    # -------------------------
+    # Field Ability
+    # -------------------------
+
+    field_ability_y = 900
+
+    draw.text(
+        (50, field_ability_y),
+        "FIELD ABILITY",
+        font=header_font,
+        fill="black",
+    )
+
+    # Empty writing area for players
+    draw.line(
+        (50, field_ability_y + 45, 700, field_ability_y + 45),
+        fill="black",
+        width=2,
+    )
+
+    draw.line(
+        (50, field_ability_y + 85, 700, field_ability_y + 85),
+        fill="black",
+        width=2,
+    )
+
+    # -------------------------
+    # Save
+    # -------------------------
+
+    if output_path is not None:
+        card.save(output_path)
+
+    return card
+
+def create_pokemon_card_old(
+    pokemon: Pokemon,
+    shiny: bool = False,
+    output_path: str | None = None,
+) -> Image.Image:
+
+    card = Image.new(
+        "RGB",
+        (CARD_WIDTH, CARD_HEIGHT),
+        "white",
+    )
+
+    draw = ImageDraw.Draw(card)
+
+    # Fonts
+    title_font = ImageFont.load_default(size=42)
+    header_font = ImageFont.load_default(size=28)
+    normal_font = ImageFont.load_default(size=22)
+    small_font = ImageFont.load_default(size=18)
+
+    # -------------------------
+    # Pokémon name and number
+    # -------------------------
+
+    draw.text(
+        (40, 30),
+        f"#{pokemon.pokedex_number:03d}",
+        font=header_font,
+        fill="black",
+    )
+
+    draw.text(
+        (160, 22),
+        pokemon.name.upper(),
+        font=title_font,
+        fill="black",
+    )
+
+    # -------------------------
+    # Types
+    # -------------------------
+
+    type_text = pokemon.first_type.value.capitalize()
+
+    if pokemon.second_type is not None:
+        type_text += f" / {pokemon.second_type.value.capitalize()}"
+
+    draw.text(
+        (40, 85),
+        type_text,
+        font=header_font,
+        fill="black",
+    )
+
+    # -------------------------
+    # Artwork
+    # -------------------------
+
+    artwork = get_pokemon_image(
+        pokemon.name,
+        shiny=shiny,
+    )
+
+    artwork.thumbnail((340, 340))
+
+    artwork_x = (CARD_WIDTH - artwork.width) // 2
+    artwork_y = 130
+
+    card.paste(
+        artwork,
+        (artwork_x, artwork_y),
+        artwork,
+    )
+
+    # -------------------------
+    # HP and stats
+    # -------------------------
+
+    stats_top = 500
+
+    draw.text(
+        (50, stats_top),
+        f"HP: {pokemon.HP}",
+        font=header_font,
+        fill="black",
+    )
+
+    left_stats = [
+        ("ATK", pokemon.attack, pokemon.attack_modifier),
+        ("DEF", pokemon.defense, pokemon.defense_modifier),
+        ("SPD", pokemon.speed, pokemon.speed_modifier),
+    ]
+
+    right_stats = [
+        ("SpA", pokemon.special_attack, pokemon.special_attack_modifier),
+        ("SpD", pokemon.special_defense, pokemon.special_defense_modifier),
+    ]
+
+    y_left = stats_top + 45
+    for name, value, modifier in left_stats:
+        draw.text(
+            (50, y_left),
+            f"{name}: {value} (+{modifier})",
+            font=normal_font,
+            fill="black",
+        )
+        y_left += 34
+
+    y_right = stats_top + 45
+    for name, value, modifier in right_stats:
+        draw.text(
+            (380, y_right),
+            f"{name}: {value} (+{modifier})",
+            font=normal_font,
+            fill="black",
+        )
+        y_right += 34
+
+    # -------------------------
+    # Ability
+    # -------------------------
+
+    ability_y = 640
+
+    draw.text(
+        (50, ability_y),
+        "ABILITY",
+        font=header_font,
+        fill="black",
+    )
+
+    draw.text(
+        (50, ability_y + 35),
+        pokemon.ability.name,
+        font=normal_font,
+        fill="black",
+    )
+
+    draw_wrapped_text(
+        draw=draw,
+        text=pokemon.ability.description,
+        position=(50, ability_y + 65),
+        font=small_font,
+        max_width=650,
+    )
+
+    # -------------------------
+    # Pokédex entry
+    # -------------------------
+
+    pokedex_y = 790
+
+    draw.text(
+        (50, pokedex_y),
+        "POKÉDEX ENTRY",
+        font=header_font,
+        fill="black",
+    )
+
+    if pokemon.pokedex_entry:
+        draw_wrapped_text(
+            draw=draw,
+            text=pokemon.pokedex_entry,
+            position=(50, pokedex_y + 35),
+            font=small_font,
+            max_width=650,
+        )
+    else:
+        draw.text(
+            (50, pokedex_y + 35),
+            "No Pokédex entry available.",
+            font=small_font,
+            fill="black",
+        )
+
+        # -------------------------
+    # Field Ability
+    # -------------------------
+
+    field_ability_y = 900
+
+    draw.text(
+        (50, field_ability_y),
+        "FIELD ABILITY",
+        font=header_font,
+        fill="black",
+    )
+
+    # Empty writing area for players
+    draw.line(
+        (50, field_ability_y + 45, 700, field_ability_y + 45),
+        fill="black",
+        width=2,
+    )
+
+    draw.line(
+        (50, field_ability_y + 85, 700, field_ability_y + 85),
+        fill="black",
+        width=2,
+    )
+
+    # -------------------------
+    # Save
+    # -------------------------
+
+    if output_path is not None:
+        card.save(output_path)
+
+    return card
+
+
+
+def create_move_card(
+    move: Move,
+    output_path: str | None = None,
+) -> Image.Image:
+    MOVE_CARD_WIDTH = 400
+    MOVE_CARD_HEIGHT = 400
+
+    card = Image.new(
+        "RGB",
+        (MOVE_CARD_WIDTH, MOVE_CARD_HEIGHT),
+        "white",
+    )
+
+    draw = ImageDraw.Draw(card)
+
+    # Fonts
+    title_font = ImageFont.load_default(size=34)
+    header_font = ImageFont.load_default(size=24)
+    normal_font = ImageFont.load_default(size=20)
+    small_font = ImageFont.load_default(size=18)
+
+    # -------------------------
+    # Border
+    # -------------------------
+
+    draw.rectangle(
+        (10, 10, MOVE_CARD_WIDTH - 10, MOVE_CARD_HEIGHT - 10),
+        outline="black",
+        width=3,
+    )
+
+    # -------------------------
+    # Move name
+    # -------------------------
+
+    draw.text(
+        (30, 30),
+        move.name.upper(),
+        font=title_font,
+        fill="black",
+    )
+
+    # -------------------------
+    # Type and category
+    # -------------------------
+
+    type_line = (
+        f"{move.element_type.value.capitalize()} • "
+        f"{move.move_type.value.capitalize()}"
+    )
+
+    draw.text(
+        (30, 80),
+        type_line,
+        font=header_font,
+        fill="black",
+    )
+
+    # -------------------------
+    # Main stats
+    # -------------------------
+
+    y = 140
+
+    if move.hit_die is not None:
+        draw.text(
+            (30, y),
+            f"Damage: {move.hit_die}",
+            font=normal_font,
+            fill="black",
+        )
+        y += 35
+
+    draw.text(
+        (30, y),
+        f"Accuracy: {move.accuracy}",
+        font=normal_font,
+        fill="black",
+    )
+    y += 35
+
+    draw.text(
+        (30, y),
+        f"PP: {move.PP}",
+        font=normal_font,
+        fill="black",
+    )
+    y += 50
+
+    # -------------------------
+    # Description
+    # -------------------------
+
+    draw.text(
+        (30, y),
+        "DESCRIPTION",
+        font=header_font,
+        fill="black",
+    )
+    y += 35
+
+    description_text = (
+        move.description
+        if move.description is not None
+        else "No description available."
+    )
+
+    draw_wrapped_text(
+        draw=draw,
+        text=description_text,
+        position=(30, y),
+        font=small_font,
+        max_width=340,
+    )
+
+    # -------------------------
+    # Save
+    # -------------------------
+
+    if output_path is not None:
+        card.save(output_path)
+
+    return card
