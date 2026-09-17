@@ -42,6 +42,7 @@ def get_pokemon_image(
         BytesIO(image_response.content)
     ).convert("RGBA")
 
+
 def draw_wrapped_text(
     draw: ImageDraw.ImageDraw,
     text: str,
@@ -49,7 +50,7 @@ def draw_wrapped_text(
     font: ImageFont.ImageFont,
     max_width: int,
     line_spacing: int = 5,
-):
+) -> int | float:
     x, y = position
 
     words = text.split()
@@ -57,22 +58,20 @@ def draw_wrapped_text(
     current_line = ""
 
     for word in words:
-        test_line = (
-            f"{current_line} {word}".strip()
-        )
+        test_line = f"{current_line} {word}".strip()
 
         bbox = draw.textbbox(
             (0, 0),
             test_line,
             font=font,
         )
-
         width = bbox[2] - bbox[0]
 
         if width <= max_width:
             current_line = test_line
         else:
-            lines.append(current_line)
+            if current_line:
+                lines.append(current_line)
             current_line = word
 
     if current_line:
@@ -91,10 +90,13 @@ def draw_wrapped_text(
             line,
             font=font,
         )
-
         line_height = bbox[3] - bbox[1]
-
         y += line_height + line_spacing
+
+    return y
+
+
+
 
 def draw_friendship_bar(
     draw: ImageDraw.ImageDraw,
@@ -133,25 +135,43 @@ def create_pokemon_card(
 
     draw = ImageDraw.Draw(card)
 
+    # -------------------------
+    # Card border
+    # -------------------------
+
+    border_margin = 8
+
+    draw.rectangle(
+        (
+            border_margin,
+            border_margin,
+            CARD_WIDTH - border_margin,
+            CARD_HEIGHT - border_margin,
+        ),
+        outline="black",
+        width=2,
+    )
+
     # Fonts
-    title_font = ImageFont.load_default(size=42)
-    header_font = ImageFont.load_default(size=28)
-    normal_font = ImageFont.load_default(size=22)
-    small_font = ImageFont.load_default(size=18)
+    title_font = ImageFont.load_default(size=44)
+    header_font = ImageFont.load_default(size=30)
+    stat_font = ImageFont.load_default(size=32)
+    normal_font = ImageFont.load_default(size=26)
+    body_font = ImageFont.load_default(size=24)
 
     # -------------------------
     # Pokémon name and number
     # -------------------------
 
     draw.text(
-        (40, 30),
+        (35, 25),
         f"#{pokemon.pokedex_number:03d}",
         font=header_font,
         fill="black",
     )
 
     draw.text(
-        (160, 22),
+        (155, 18),
         pokemon.name.upper(),
         font=title_font,
         fill="black",
@@ -167,7 +187,7 @@ def create_pokemon_card(
         type_text += f" / {pokemon.second_type.value.capitalize()}"
 
     draw.text(
-        (40, 85),
+        (35, 78),
         type_text,
         font=header_font,
         fill="black",
@@ -178,15 +198,15 @@ def create_pokemon_card(
     # -------------------------
 
     draw.text(
-        (40, 120),
+        (35, 112),
         "FRIENDSHIP",
-        font=small_font,
+        font=body_font,
         fill="black",
     )
 
     draw_friendship_bar(
         draw=draw,
-        position=(200, 118),
+        position=(205, 110),
     )
 
     # -------------------------
@@ -201,7 +221,7 @@ def create_pokemon_card(
     artwork.thumbnail((320, 320))
 
     artwork_x = (CARD_WIDTH - artwork.width) // 2
-    artwork_y = 170
+    artwork_y = 150
 
     card.paste(
         artwork,
@@ -213,125 +233,140 @@ def create_pokemon_card(
     # HP and stats
     # -------------------------
 
-    stats_top = 500
+    stats_top = 485
 
     draw.text(
-        (50, stats_top),
+        (45, stats_top),
         f"HP: {pokemon.HP}",
         font=header_font,
         fill="black",
     )
 
-    left_stats = [
-        ("ATK", pokemon.attack, pokemon.attack_modifier),
-        ("DEF", pokemon.defense, pokemon.defense_modifier),
-        ("SPD", pokemon.speed, pokemon.speed_modifier),
-    ]
+    # 3 columns:
+    # col 1 -> ATK / DEF
+    # col 2 -> SpA / SpD
+    # col 3 -> SPD
+    col1_x = 45
+    col2_x = 270
+    col3_x = 515
 
-    right_stats = [
-        ("SpA", pokemon.special_attack, pokemon.special_attack_modifier),
-        ("SpD", pokemon.special_defense, pokemon.special_defense_modifier),
-    ]
+    row1_y = stats_top + 45
+    row2_y = stats_top + 85
 
-    y_left = stats_top + 45
-    for name, value, modifier in left_stats:
-        draw.text(
-            (50, y_left),
-            f"{name}: {value} (+{modifier})",
-            font=normal_font,
-            fill="black",
-        )
-        y_left += 34
+    draw.text(
+        (col1_x, row1_y),
+        f"ATK: {pokemon.attack} (+{pokemon.attack_modifier})",
+        font=stat_font,
+        fill="black",
+    )
+    draw.text(
+        (col1_x, row2_y),
+        f"DEF: {pokemon.defense} (+{pokemon.defense_modifier})",
+        font=stat_font,
+        fill="black",
+    )
 
-    y_right = stats_top + 45
-    for name, value, modifier in right_stats:
-        draw.text(
-            (380, y_right),
-            f"{name}: {value} (+{modifier})",
-            font=normal_font,
-            fill="black",
-        )
-        y_right += 34
+    draw.text(
+        (col2_x, row1_y),
+        f"SpA: {pokemon.special_attack} (+{pokemon.special_attack_modifier})",
+        font=stat_font,
+        fill="black",
+    )
+    draw.text(
+        (col2_x, row2_y),
+        f"SpD: {pokemon.special_defense} (+{pokemon.special_defense_modifier})",
+        font=stat_font,
+        fill="black",
+    )
+
+    draw.text(
+        (col3_x, row1_y + 20),
+        f"SPD: {pokemon.speed} (+{pokemon.speed_modifier})",
+        font=stat_font,
+        fill="black",
+    )
 
     # -------------------------
     # Ability
     # -------------------------
 
-    ability_y = 640
+    ability_y = 610
 
     draw.text(
-        (50, ability_y),
+        (45, ability_y),
         "ABILITY",
         font=header_font,
         fill="black",
     )
 
     draw.text(
-        (50, ability_y + 35),
+        (45, ability_y + 34),
         pokemon.ability.name,
         font=normal_font,
         fill="black",
     )
 
-    draw_wrapped_text(
+    ability_end_y = draw_wrapped_text(
         draw=draw,
         text=pokemon.ability.description,
-        position=(50, ability_y + 65),
-        font=small_font,
-        max_width=650,
+        position=(45, ability_y + 68),
+        font=body_font,
+        max_width=660,
+        line_spacing=4,
     )
 
     # -------------------------
     # Pokédex entry
     # -------------------------
 
-    pokedex_y = 790
+    pokedex_y = ability_end_y + 18
 
     draw.text(
-        (50, pokedex_y),
+        (45, pokedex_y),
         "POKÉDEX ENTRY",
         font=header_font,
         fill="black",
     )
 
     if pokemon.pokedex_entry:
-        draw_wrapped_text(
+        pokedex_end_y = draw_wrapped_text(
             draw=draw,
             text=pokemon.pokedex_entry,
-            position=(50, pokedex_y + 35),
-            font=small_font,
-            max_width=650,
+            position=(45, pokedex_y + 34),
+            font=body_font,
+            max_width=660,
+            line_spacing=4,
         )
     else:
         draw.text(
-            (50, pokedex_y + 35),
+            (45, pokedex_y + 34),
             "No Pokédex entry available.",
-            font=small_font,
+            font=body_font,
             fill="black",
         )
+        pokedex_end_y = pokedex_y + 34 + 24
 
     # -------------------------
     # Field Ability
     # -------------------------
 
-    field_ability_y = 900
+    field_ability_y = pokedex_end_y + 18
 
     draw.text(
-        (50, field_ability_y),
+        (45, field_ability_y),
         "FIELD ABILITY",
         font=header_font,
         fill="black",
     )
 
-    # Empty writing area for players
     draw.line(
-        (50, field_ability_y + 45, 700, field_ability_y + 45),
+        (45, field_ability_y + 42, 705, field_ability_y + 42),
         fill="black",
         width=2,
     )
 
     draw.line(
-        (50, field_ability_y + 85, 700, field_ability_y + 85),
+        (45, field_ability_y + 78, 705, field_ability_y + 78),
         fill="black",
         width=2,
     )
@@ -344,6 +379,7 @@ def create_pokemon_card(
         card.save(output_path)
 
     return card
+
 
 def create_pokemon_card_old(
     pokemon: Pokemon,
