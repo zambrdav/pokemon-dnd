@@ -4,11 +4,25 @@ from PIL import Image, ImageDraw, ImageFont
 from pokemons.pokemon import Pokemon
 from pokemons.abilities import Ability
 from pokemons.moves import Move
-
+import os
+import textwrap
 
 CARD_WIDTH = 750
 CARD_HEIGHT = 1050
 
+TYPE_COLORS = {
+    "Normal": "#A8A878",
+    "Fire": "#F08030",
+    "Water": "#6890F0",
+    "Grass": "#78C850",
+    "Electric": "#F8D030",
+    "Ice": "#98D8D8",
+    "Dark": "#705848",
+    "Steel": "#B8B8D0",
+    "Poison": "#A040A0",
+    "Flying": "#A890F0",
+    "Psychic": "#F85888",
+}
 
 def get_pokemon_image(
     pokemon_name: str,
@@ -387,7 +401,7 @@ def create_move_card(
     output_path: str | None = None,
 ) -> Image.Image:
     MOVE_CARD_WIDTH = 400
-    MOVE_CARD_HEIGHT = 400
+    MOVE_CARD_HEIGHT = 500
 
     card = Image.new(
         "RGB",
@@ -399,9 +413,9 @@ def create_move_card(
 
     # Fonts
     title_font = ImageFont.load_default(size=34)
-    header_font = ImageFont.load_default(size=24)
-    normal_font = ImageFont.load_default(size=20)
-    small_font = ImageFont.load_default(size=18)
+    header_font = ImageFont.load_default(size=26)
+    normal_font = ImageFont.load_default(size=22)
+    small_font = ImageFont.load_default(size=22)
 
     # -------------------------
     # Border
@@ -444,7 +458,7 @@ def create_move_card(
     # Main stats
     # -------------------------
 
-    y = 140
+    y = 120
 
     if move.hit_die is not None:
         draw.text(
@@ -461,14 +475,9 @@ def create_move_card(
         font=normal_font,
         fill="black",
     )
-    y += 35
 
-    draw.text(
-        (30, y),
-        f"PP: {move.PP}",
-        font=normal_font,
-        fill="black",
-    )
+
+
     y += 50
 
     # -------------------------
@@ -505,3 +514,52 @@ def create_move_card(
         card.save(output_path)
 
     return card
+
+    img = Image.new("RGB", (CARD_WIDTH, CARD_HEIGHT), "#FFFFFF")
+    draw = ImageDraw.Draw(img)
+
+    type_name = getattr(move.element_type, "name", str(move.element_type)).capitalize()
+    color = TYPE_COLORS.get(type_name, "#777777")
+
+    # Card border & header background
+    draw.rectangle([0, 0, CARD_WIDTH, CARD_HEIGHT], fill="#F8F9FA", outline="#222222", width=12)
+    draw.rectangle([20, 20, CARD_WIDTH - 20, 160], fill=color)
+
+    # Fonts (fallback to default if ttf not available)
+    try:
+        title_font = ImageFont.truetype("DejaVuSans-Bold.ttf", 46)
+        sub_font = ImageFont.truetype("DejaVuSans-Bold.ttf", 28)
+        body_font = ImageFont.truetype("DejaVuSans.ttf", 26)
+    except IOError:
+        title_font = sub_font = body_font = ImageFont.load_default()
+
+    # Title & Type Banner
+    draw.text((40, 45), move.name, fill="#FFFFFF", font=title_font)
+    draw.text((40, 110), f"{type_name} • {move.move_type.name}", fill="#F0F0F0", font=sub_font)
+
+    # Stat Row Box
+    draw.rectangle([40, 180, CARD_WIDTH - 40, 270], fill="#E9ECEF", outline="#CED4DA", width=2)
+    
+    # Handle hit die / status display
+    dmg = getattr(move, "hit_die", "Status")
+    acc_text = f"Acc: {move.accuracy}/10" if move.accuracy <= 10 else f"Acc: {move.accuracy}%"
+    tier_text = f"Tier {getattr(move, 'tier', 1)}"
+    
+    draw.text((60, 210), f"Damage: {dmg}", fill="#212529", font=sub_font)
+    draw.text((330, 210), acc_text, fill="#212529", font=sub_font)
+    draw.text((540, 210), tier_text, fill="#495057", font=sub_font)
+
+    # Description Box
+    draw.rectangle([40, 300, CARD_WIDTH - 40, 950], fill="#FFFFFF", outline="#DEE2E6", width=2)
+    
+    # Text wrapping
+    lines = textwrap.wrap(move.description, width=38)
+    y_offset = 340
+    for line in lines:
+        draw.text((65, y_offset), line, fill="#212529", font=body_font)
+        y_offset += 42
+
+    # Save
+    if output_path is not None:
+        img.save(output_path)
+    return img

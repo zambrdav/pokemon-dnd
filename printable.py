@@ -210,7 +210,6 @@ def create_printable_pokemon_pdf(
     )
 
 
-
 def create_printable_moves_pdf(
     cards: list[Image.Image],
     output_path: str,
@@ -219,7 +218,7 @@ def create_printable_moves_pdf(
         cards=cards,
         output_path=output_path,
         cards_per_row=4,
-        margin_mm=10,
-        gap_mm=5,
+        margin_mm=4,
+        gap_mm=2,
+        back=False,
     )
-

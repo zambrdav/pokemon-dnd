@@ -73,6 +73,11 @@ class Pokemon:
         for stat_name, value in stats.items():
             if stat_name != "hp":
                 stats[stat_name] = convert_stat(value)
+            # HP is divided by 1.5
+            elif stat_name == "hp":
+                stats[stat_name] = round(value / 1.5)
+
+
 
 
         types = [
