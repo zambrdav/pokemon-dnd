@@ -210,6 +210,20 @@ def create_printable_pokemon_pdf(
     )
 
 
+def create_printable_tokens_pdf(
+    cards: list[Image.Image],
+    output_path: str,
+):
+    create_printable_pdf(
+        cards=cards,
+        output_path=output_path,
+        cards_per_row=5,
+        margin_mm=4,
+        gap_mm=2,
+        back=False,
+    )
+
+
 def create_printable_moves_pdf(
     cards: list[Image.Image],
     output_path: str,

@@ -10,6 +10,8 @@ import textwrap
 CARD_WIDTH = 750
 CARD_HEIGHT = 1050
 
+TOKEN_SIZE = 500
+
 TYPE_COLORS = {
     "Normal": "#A8A878",
     "Fire": "#F08030",
@@ -108,7 +110,6 @@ def draw_wrapped_text(
         y += line_height + line_spacing
 
     return y
-
 
 
 
@@ -395,6 +396,41 @@ def create_pokemon_card(
     return card
 
 
+
+def create_pokemon_token(
+    pokemon: Pokemon,
+    size: int = TOKEN_SIZE,
+    border_color: str = "#2B2D42",
+    bg_color: str = "#F8F9FA",
+    shiny: bool = False,
+) -> Image.Image:
+    """Creates a neutral, square initiative token displaying only the Pokemon artwork."""
+
+    art_img = get_pokemon_image(pokemon.name, shiny=shiny)
+
+    # 2. Base square canvas
+    token = Image.new("RGBA", (size, size), bg_color)
+    draw = ImageDraw.Draw(token)
+
+    border_w = int(size * 0.04)  # ~24px uniform neutral border
+
+    # 3. Outer boundary & background
+    draw.rectangle(
+        [0, 0, size, size],
+        fill=bg_color,
+        outline=border_color,
+        width=border_w,
+    )
+
+    # 4. Scale and center artwork within inner bounds
+    inner_dim = size - (border_w * 2) - 30  # 15px padding inside border
+    art_img.thumbnail((inner_dim, inner_dim), Image.Resampling.LANCZOS)
+
+    art_x = (size - art_img.width) // 2
+    art_y = (size - art_img.height) // 2
+    token.paste(art_img, (art_x, art_y), art_img)
+
+    return token.convert("RGB")
 
 def create_move_card(
     move: Move,
